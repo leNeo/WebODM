@@ -23,8 +23,11 @@ const webodmSetProvider = [
   'i=this._container.querySelectorAll("li"),o=0;o<i.length;++o){',
   'var r=i[o].dataset.id;t.DomUtil.setClass(i[o],this.getProviderItemClass(r)),',
   'this.setProviderRadioButton(i[o],r)}if("custom"===e&&n)return void ',
-  't.tileLayer(n,{attribution:"",maxZoom:23,maxNativeZoom:19}).addTo(this._map);',
-  'var a=this.options.providers.find(function(t){return t.id===e});if(a){',
+  '(window.__webodmGcpDestinationProjection=null,',
+  't.tileLayer(n,{attribution:"",maxZoom:23,maxNativeZoom:19})',
+  '.addTo(this._map));',
+  'var a=this.options.providers.find(function(t){return t.id===e});',
+  'window.__webodmGcpDestinationProjection=a&&a.gcpProjection||null;if(a){',
   'var s={attribution:a.attribution||a.attribute||a.label,maxZoom:23,',
   'maxNativeZoom:a.maxZoom||20,minZoom:a.minZoom||0,',
   'subdomains:a.subdomains||[]},u;',
@@ -47,8 +50,23 @@ const epsg2056Definition = [
 ].join(' ');
 const epsg2056Marker = '.defs("EPSG:2056",';
 const proj4GlobalMarker = 'window.__webodmGcpProj4=';
+const exportProj4Marker = 'window.__webodmGcpExportProjectionSupport=';
 const projectionValidationPattern =
   /try\{\(0,([A-Za-z_$][\w$]*)\.default\)\(([A-Za-z_$][\w$]*),"EPSG:4326",\[0,0\]\)\}catch\(([A-Za-z_$][\w$]*)\)\{/;
+const generateGcpOutputPattern =
+  /e\.generateGcpOutput=function\(([A-Za-z_$][\w$]*),([A-Za-z_$][\w$]*),([A-Za-z_$][\w$]*),([A-Za-z_$][\w$]*)\)\{var ([A-Za-z_$][\w$]*)=\[\];/;
+const exportProjectionPattern = [
+  /var e="EPSG:4326",n=t\.controlpoints,i=n\.points,o=n\.status,/,
+  /r=t\.sourceProjection;if\(r&&"EPSG:4326"!==r\)e=r;else\{/,
+  /var a=i\.filter\(function\(t\)\{return"map"===t\.type\}\)/,
+  /\.map\(function\(t\)\{return\(0,M\.getUtmZoneFromLatLng\)/,
+  /\(t\.coord\[0\],t\.coord\[1\]\)\}\);/,
+  /if\(a=\(0,y\.default\)\(a,v\.default\),1===a\.length\)\{/,
+  /var s=a\[0\],u=s\.zone,l=s\.hemisphere;/,
+  /e=\(0,M\.getProj4Utm\)\(u,l\)\}\}/
+].map(pattern => pattern.source).join('');
+const exportProjectionMarker =
+  'window.__webodmGcpDestinationProjection||"EPSG:4326"';
 const swisstopoHeightEndpoint =
   'https://api3.geo.admin.ch/rest/services/height';
 const elevationTolerance = 0.1;
@@ -217,7 +235,7 @@ function patchBundleContent(input) {
         'attribution:t.attribution||t.label,maxZoom:t.maxzoom||20,',
         'minZoom:t.minzoom||0,subdomains:t.subdomains||[],',
         'type:t.type||"tms",layers:t.layers,styles:t.styles,format:t.format,',
-        'default:!!t.default}}):[',
+        'gcpProjection:t.gcpProjection||null,default:!!t.default}}):[',
         fallbackProviders,
         '] }(),custom_placeholder:'
       ].join('')
@@ -280,6 +298,43 @@ function patchBundleContent(input) {
       existingDefinitionPattern,
       (match, proj4Module) =>
         `window.__webodmGcpProj4=${proj4Module}.default;${match}`
+    );
+    changed = true;
+  }
+
+  if (!bundle.includes(exportProj4Marker)) {
+    if (!generateGcpOutputPattern.test(bundle)) {
+      throw new Error('Could not locate the GCPI output generator');
+    }
+
+    bundle = bundle.replace(
+      generateGcpOutputPattern,
+      (match, joins, points, sourceProjection, destinationProjection, rows) =>
+        `e.generateGcpOutput=function(${joins},${points},${sourceProjection},` +
+        `${destinationProjection}){window.__webodmGcpExportProjectionSupport=!0;` +
+        `window.__webodmGcpProj4=s.default;` +
+        `s.default.defs("EPSG:2056","${epsg2056Definition}");var ${rows}=[];`
+    );
+    changed = true;
+  }
+
+  if (!bundle.includes(exportProjectionMarker)) {
+    const pattern = new RegExp(exportProjectionPattern);
+
+    if (!pattern.test(bundle)) {
+      throw new Error('Could not locate the GCPI export projection selection');
+    }
+
+    bundle = bundle.replace(
+      pattern,
+      'var e=window.__webodmGcpDestinationProjection||"EPSG:4326",' +
+      'n=t.controlpoints,i=n.points,o=n.status,r=t.sourceProjection;' +
+      'if(!window.__webodmGcpDestinationProjection){' +
+      'if(r&&"EPSG:4326"!==r)e=r;else{var a=i.filter(function(t){' +
+      'return"map"===t.type}).map(function(t){return(0,' +
+      'M.getUtmZoneFromLatLng)(t.coord[0],t.coord[1])});' +
+      'if(a=(0,y.default)(a,v.default),1===a.length){var s=a[0],' +
+      'u=s.zone,l=s.hemisphere;e=(0,M.getProj4Utm)(u,l)}}}'
     );
     changed = true;
   }

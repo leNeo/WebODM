@@ -7,6 +7,10 @@ Leaflet overzooms imagery through level 28.
 
 SWISSIMAGE is installed as a normal WebODM basemap by migration, so it can be
 edited, disabled by deletion, or selected as the default from the admin.
+When a swisstopo basemap is selected in the GCP Interface, the generated GCP
+file defaults to `EPSG:2056` and its map coordinates are exported in LV95.
+Selecting another basemap restores the normal automatic UTM/source projection
+selection. The destination projection field remains manually editable.
 
 It also registers the Swiss LV95 coordinate reference system with the bundled
 Proj4 library. Existing GCP files can use `EPSG:2056` on their first line:

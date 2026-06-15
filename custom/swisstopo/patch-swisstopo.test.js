@@ -22,6 +22,15 @@ const fixture = [
   'maxNativeZoom:a.maxZoom}).addTo(this._map):t.tileLayer(a.url,',
   '{attribution:a.attribute,maxZoom:23,maxNativeZoom:a.maxZoom})',
   '.addTo(this._map))}',
+  'e.generateGcpOutput=function(t,e,n,i){var o=[];',
+  'function exportProps(t){var e="EPSG:4326",n=t.controlpoints,',
+  'i=n.points,o=n.status,r=t.sourceProjection;',
+  'if(r&&"EPSG:4326"!==r)e=r;else{var a=i.filter(function(t){',
+  'return"map"===t.type}).map(function(t){return',
+  '(0,M.getUtmZoneFromLatLng)(t.coord[0],t.coord[1])});',
+  'if(a=(0,y.default)(a,v.default),1===a.length){',
+  'var s=a[0],u=s.zone,l=s.hemisphere;',
+  'e=(0,M.getProj4Utm)(u,l)}}var c=o.errors}',
   'mapOptions:{maxZoom:23,maxNativeZoom:20},',
   'c.innerHTML="Apply",t.DomEvent.on(c,"click",function(t){',
   'n.onCustomProviderClick(t,l.value)})},setProviderRadioButton:function(t,e){',
@@ -47,9 +56,20 @@ assert.strictEqual(first.changed, true);
 assert(first.bundle.includes('window.parent.__webodmGcpiConfig'));
 assert(first.bundle.includes('id:"webodm-basemap-"+e'));
 assert(first.bundle.includes('type:t.type||"tms"'));
+assert(first.bundle.includes('gcpProjection:t.gcpProjection||null'));
 assert(first.bundle.includes('"wms"===a.type'));
 assert(first.bundle.includes('t.tileLayer.wms(a.url,s)'));
 assert(first.bundle.includes('return t.default'));
+assert(first.bundle.includes(
+  'window.__webodmGcpDestinationProjection=a&&a.gcpProjection||null'
+));
+assert(first.bundle.includes(
+  'var e=window.__webodmGcpDestinationProjection||"EPSG:4326"'
+));
+assert(first.bundle.includes('window.__webodmGcpExportProjectionSupport=!0'));
+assert(first.bundle.includes(
+  `s.default.defs("EPSG:2056","${epsg2056Definition}")`
+));
 assert(first.bundle.includes('maxZoom:28,maxNativeZoom:20'));
 assert(first.bundle.includes('window.__webodmGcpProj4=C.default'));
 assert(first.bundle.includes(`C.default.defs("EPSG:2056","${epsg2056Definition}")`));

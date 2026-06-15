@@ -16,4 +16,5 @@ class TestGcpiIntegration(BootTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContains(response, 'window.__webodmGcpiConfig')
         self.assertContains(response, 'swisstopo')
+        self.assertContains(response, 'EPSG:2056')
         self.assertContains(response, 'Ground Control Point Interface')
