@@ -2,8 +2,11 @@ const assert = require('assert');
 
 const {
   elevationTolerance,
+  epsg21781Definition,
   epsg2056Definition,
+  epsg4258Definition,
   patchBundleContent,
+  projectionRegistration,
   swisstopoHeightEndpoint
 } = require('./patch-swisstopo');
 
@@ -67,15 +70,37 @@ assert(first.bundle.includes(
   'var e=window.__webodmGcpDestinationProjection||"EPSG:4326"'
 ));
 assert(first.bundle.includes('window.__webodmGcpExportProjectionSupport=!0'));
+assert(first.bundle.includes('window.__webodmGcpProjectionSupport=!0'));
+assert(!first.bundle.includes('window.__webodmGcpProjectionSupport==!0'));
 assert(first.bundle.includes(
   `s.default.defs("EPSG:2056","${epsg2056Definition}")`
 ));
+assert(first.bundle.includes(
+  `s.default.defs("EPSG:21781","${epsg21781Definition}")`
+));
+assert(first.bundle.includes(
+  `s.default.defs("EPSG:4258","${epsg4258Definition}")`
+));
+assert(first.bundle.includes('"EPSG:326"+__webodmZoneCode'));
+assert(first.bundle.includes('"EPSG:327"+__webodmZoneCode'));
+assert(first.bundle.includes('"EPSG:258"+__webodmEtrsZone'));
 assert(first.bundle.includes('maxZoom:28,maxNativeZoom:20'));
 assert(first.bundle.includes('window.__webodmGcpProj4=C.default'));
 assert(first.bundle.includes(`C.default.defs("EPSG:2056","${epsg2056Definition}")`));
+assert(first.bundle.includes(`C.default.defs("EPSG:21781","${epsg21781Definition}")`));
 assert(first.bundle.includes('(0,C.default)(a,"EPSG:4326",[0,0])'));
 assert(first.bundle.includes(swisstopoHeightEndpoint));
 assert(first.bundle.includes('elevation_model=COMB'));
+assert(first.bundle.includes('getGcpPointWgs84'));
+assert(first.bundle.includes(
+  'i.sourceProjection||i.projection||window.__webodmGcpDestinationProjection'
+));
+assert(first.bundle.includes(
+  'window.__webodmGcpProj4(o,"EPSG:4326",[n,e])'
+));
+assert(first.bundle.includes(
+  '?easting="+encodeURIComponent(i)+"&northing="+encodeURIComponent(o)'
+));
 assert(first.bundle.includes(`Math.abs(i-c)>${elevationTolerance}`));
 assert(first.bundle.includes('Altitude swisstopo :'));
 assert(first.bundle.includes('data-testid","compare-gcp-altitudes'));
@@ -117,4 +142,28 @@ assert.throws(
   /Could not locate the GCPI point position action/
 );
 
-console.log('SWISSIMAGE, EPSG:2056 and elevation bundle patch tests passed');
+const registration = projectionRegistration('proj4', 'window.supported');
+assert(registration.includes('proj4.defs("EPSG:21781"'));
+assert(registration.includes('proj4.defs("EPSG:326"+__webodmZoneCode'));
+assert(registration.includes('proj4.defs("EPSG:327"+__webodmZoneCode'));
+assert(registration.includes('proj4.defs("EPSG:258"+__webodmEtrsZone'));
+
+const registeredDefinitions = {};
+const proj4 = {
+  defs(code, definition) {
+    registeredDefinitions[code] = definition;
+  }
+};
+global.window = {};
+eval(registration);
+
+assert.strictEqual(window.supported, true);
+assert.strictEqual(window.__webodmGcpProj4, proj4);
+assert.strictEqual(registeredDefinitions['EPSG:2056'], epsg2056Definition);
+assert.strictEqual(registeredDefinitions['EPSG:21781'], epsg21781Definition);
+assert(registeredDefinitions['EPSG:32632'].includes('+zone=32'));
+assert(registeredDefinitions['EPSG:32732'].includes('+south'));
+assert(registeredDefinitions['EPSG:25832'].includes('+ellps=GRS80'));
+assert.strictEqual(Object.keys(registeredDefinitions).length, 134);
+
+console.log('SWISSIMAGE, multi-CRS and elevation bundle patch tests passed');

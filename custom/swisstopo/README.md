@@ -20,6 +20,13 @@ EPSG:2056
 2600000 1200000 500 1024 768 image.jpg
 ```
 
+Altitude validation is independent from the horizontal coordinate system used
+by the GCP file. Map points are normalized to WGS84, then converted to LV95 for
+the swisstopo height service. In addition to Proj4 strings and WebODM's
+`WGS84 UTM 32N` notation, the patch registers `EPSG:21781`, `EPSG:4258`,
+WGS84 UTM codes `EPSG:32601` through `EPSG:32760`, and ETRS89 UTM codes
+`EPSG:25828` through `EPSG:25838`.
+
 The existing `posm-gcpi` plugin, managed at `/admin/app/plugin/`, includes a
 checkbox to compare an existing GCP altitude
 with the official swisstopo terrain height whenever its marker is selected.

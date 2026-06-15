@@ -48,8 +48,21 @@ const epsg2056Definition = [
   '+units=m',
   '+no_defs'
 ].join(' ');
-const epsg2056Marker = '.defs("EPSG:2056",';
-const proj4GlobalMarker = 'window.__webodmGcpProj4=';
+const epsg21781Definition = [
+  '+proj=somerc',
+  '+lat_0=46.95240555555556',
+  '+lon_0=7.439583333333333',
+  '+k_0=1',
+  '+x_0=600000',
+  '+y_0=200000',
+  '+ellps=bessel',
+  '+towgs84=674.374,15.056,405.346,0,0,0,0',
+  '+units=m',
+  '+no_defs'
+].join(' ');
+const epsg4258Definition = '+proj=longlat +ellps=GRS80 +no_defs';
+const projectionSupportGlobal = 'window.__webodmGcpProjectionSupport';
+const projectionSupportMarker = `${projectionSupportGlobal}=`;
 const exportProj4Marker = 'window.__webodmGcpExportProjectionSupport=';
 const projectionValidationPattern =
   /try\{\(0,([A-Za-z_$][\w$]*)\.default\)\(([A-Za-z_$][\w$]*),"EPSG:4326",\[0,0\]\)\}catch\(([A-Za-z_$][\w$]*)\)\{/;
@@ -148,13 +161,28 @@ const originalMarkerToggle =
   'a(!1,null,null,null,t,[n.lat,n.lng]):r.mode===b.CP_MODES.IMAGE_EDIT?' +
   's(t):void o(t)}}';
 const altitudeMarkerToggle = [
+  '{key:"getGcpPointWgs84",value:function(t){',
+  'if(!window.__webodmGcpProj4)',
+  'throw new Error("Proj4 indisponible");',
+  'if(!t.coord||2!==t.coord.length)',
+  'throw new Error("Coordonnees GCP invalides");',
+  'var e=parseFloat(t.coord[0]),n=parseFloat(t.coord[1]);',
+  'if(!isFinite(e)||!isFinite(n))',
+  'throw new Error("Coordonnees GCP invalides");',
+  'if(Math.abs(e)<=90&&Math.abs(n)<=180)return[n,e];',
+  'var i=this.props.imagery||{},o=i.sourceProjection||i.projection||',
+  'window.__webodmGcpDestinationProjection;',
+  'if(!o)throw new Error("Projection du fichier GCP inconnue");',
+  'var r=window.__webodmGcpProj4(o,"EPSG:4326",[n,e]);',
+  'if(!r||2!==r.length||!isFinite(r[0])||!isFinite(r[1]))',
+  'throw new Error("Conversion GCP vers WGS84 impossible");return r}},',
   '{key:"getSwisstopoElevation",value:function(t){',
   'if(!window.__webodmGcpProj4)',
-  'return Promise.reject(new Error("Proj4 EPSG:2056 indisponible"));',
-  'var e=window.__webodmGcpProj4("EPSG:4326","EPSG:2056",',
-  '[t.coord[1],t.coord[0]]),n=e[0],i=e[1];',
-  `return fetch("${swisstopoHeightEndpoint}?easting="+encodeURIComponent(n)+`,
-  '"&northing="+encodeURIComponent(i)+',
+  'return Promise.reject(new Error("Proj4 indisponible"));',
+  'var e=this.getGcpPointWgs84(t),n=window.__webodmGcpProj4(',
+  '"EPSG:4326","EPSG:2056",e),i=n[0],o=n[1];',
+  `return fetch("${swisstopoHeightEndpoint}?easting="+encodeURIComponent(i)+`,
+  '"&northing="+encodeURIComponent(o)+',
   '"&sr=2056&elevation_model=COMB").then(function(t){',
   'if(!t.ok)throw new Error("HTTP "+t.status);return t.json()',
   '}).then(function(t){var e=parseFloat(t.height);',
@@ -212,6 +240,28 @@ const altitudeMarkerToggle = [
   'o(t)}}'
 ].join('');
 const altitudePatchMarker = 'data-testid","check-all-gcp-altitudes';
+
+function projectionRegistration(proj4Expression, supportGlobal) {
+  return [
+    `${supportGlobal}=!0;`,
+    `window.__webodmGcpProj4=${proj4Expression};`,
+    `${proj4Expression}.defs("EPSG:2056","${epsg2056Definition}");`,
+    `${proj4Expression}.defs("EPSG:21781","${epsg21781Definition}");`,
+    `${proj4Expression}.defs("EPSG:4258","${epsg4258Definition}");`,
+    'for(var __webodmZone=1;__webodmZone<=60;__webodmZone++){',
+    'var __webodmZoneCode=("0"+__webodmZone).slice(-2);',
+    `${proj4Expression}.defs("EPSG:326"+__webodmZoneCode,`,
+    '"+proj=utm +zone="+__webodmZone+',
+    '" +ellps=WGS84 +datum=WGS84 +units=m +no_defs");',
+    `${proj4Expression}.defs("EPSG:327"+__webodmZoneCode,`,
+    '"+proj=utm +zone="+__webodmZone+',
+    '" +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs")}',
+    'for(var __webodmEtrsZone=28;__webodmEtrsZone<=38;__webodmEtrsZone++){',
+    `${proj4Expression}.defs("EPSG:258"+__webodmEtrsZone,`,
+    '"+proj=utm +zone="+__webodmEtrsZone+',
+    '" +ellps=GRS80 +units=m +no_defs")}'
+  ].join('');
+}
 
 function patchBundleContent(input) {
   let bundle = input;
@@ -272,7 +322,7 @@ function patchBundleContent(input) {
     throw new Error('Could not locate the GCPI map zoom configuration');
   }
 
-  if (!bundle.includes(epsg2056Marker)) {
+  if (!bundle.includes(projectionSupportMarker)) {
     if (!projectionValidationPattern.test(bundle)) {
       throw new Error('Could not locate the GCPI projection validation');
     }
@@ -280,24 +330,12 @@ function patchBundleContent(input) {
     bundle = bundle.replace(
       projectionValidationPattern,
       (match, proj4Module, sourceProjection, errorVariable) =>
-        `try{window.__webodmGcpProj4=${proj4Module}.default;` +
-        `${proj4Module}.default.defs("EPSG:2056","${epsg2056Definition}");` +
+        `try{${projectionRegistration(
+          `${proj4Module}.default`,
+          projectionSupportGlobal
+        )}` +
         `(0,${proj4Module}.default)(${sourceProjection},"EPSG:4326",[0,0])}` +
         `catch(${errorVariable}){`
-    );
-    changed = true;
-  } else if (!bundle.includes(proj4GlobalMarker)) {
-    const existingDefinitionPattern =
-      /([A-Za-z_$][\w$]*)\.default\.defs\("EPSG:2056",/;
-
-    if (!existingDefinitionPattern.test(bundle)) {
-      throw new Error('Could not expose the GCPI Proj4 instance');
-    }
-
-    bundle = bundle.replace(
-      existingDefinitionPattern,
-      (match, proj4Module) =>
-        `window.__webodmGcpProj4=${proj4Module}.default;${match}`
     );
     changed = true;
   }
@@ -312,8 +350,10 @@ function patchBundleContent(input) {
       (match, joins, points, sourceProjection, destinationProjection, rows) =>
         `e.generateGcpOutput=function(${joins},${points},${sourceProjection},` +
         `${destinationProjection}){window.__webodmGcpExportProjectionSupport=!0;` +
-        `window.__webodmGcpProj4=s.default;` +
-        `s.default.defs("EPSG:2056","${epsg2056Definition}");var ${rows}=[];`
+        `${projectionRegistration(
+          's.default',
+          projectionSupportGlobal
+        )}var ${rows}=[];`
     );
     changed = true;
   }
@@ -413,7 +453,10 @@ if (require.main === module) {
 
 module.exports = {
   elevationTolerance,
+  epsg21781Definition,
   epsg2056Definition,
+  epsg4258Definition,
   patchBundleContent,
+  projectionRegistration,
   swisstopoHeightEndpoint
 };
